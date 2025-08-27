@@ -262,6 +262,7 @@ class _MessageBubbleState extends State<MessageBubble>
     }
   }
 
+
   @override
   Widget build(BuildContext context) {
     final isUser = widget.message.type == MessageType.user;
@@ -901,7 +902,7 @@ class _MessageBubbleState extends State<MessageBubble>
                     }
                     if (link == null) return const SizedBox.shrink();
 
-                    final domain = _getDomain(link);
+                    final domain = _SourcesSheet._getDomain(link);
                     if (domain == null) return const SizedBox.shrink();
 
                     return Padding(
@@ -947,7 +948,6 @@ class _MessageBubbleState extends State<MessageBubble>
             return _SourcesSheet(
               result: result,
               scrollController: scrollController,
-              getDomain: _getDomain, // Pass the function here
             );
           },
         );
@@ -960,13 +960,20 @@ class _MessageBubbleState extends State<MessageBubble>
 class _SourcesSheet extends StatelessWidget {
   final WebSearchResult result;
   final ScrollController scrollController;
-  final String? Function(String) getDomain;
 
   const _SourcesSheet({
     required this.result,
     required this.scrollController,
-    required this.getDomain,
   });
+
+  static String? _getDomain(String urlString) {
+    try {
+      final uri = Uri.parse(urlString);
+      return uri.host;
+    } catch (e) {
+      return null;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1028,7 +1035,7 @@ class _SourcesSheet extends StatelessWidget {
 
   Widget _buildWebPageTile(BuildContext context, WebPageResult page) {
     final theme = Theme.of(context);
-    final domain = getDomain(page.link);
+    final domain = _getDomain(page.link);
 
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 6),
@@ -1128,14 +1135,6 @@ class _SourcesSheet extends StatelessWidget {
     );
   }
 
-  String? _getDomain(String urlString) {
-    try {
-      final uri = Uri.parse(urlString);
-      return uri.host;
-    } catch (e) {
-      return null;
-    }
-  }
 }
 
 // A stateful widget to decode and display a base64 image once.
@@ -1336,14 +1335,6 @@ class _ImageGenerationShimmerState extends State<_ImageGenerationShimmer>
     );
   }
 
-  String? _getDomain(String urlString) {
-    try {
-      final uri = Uri.parse(urlString);
-      return uri.host;
-    } catch (e) {
-      return null;
-    }
-  }
 }
 
 class _ShimmerPainter extends CustomPainter {
@@ -1451,6 +1442,7 @@ class _VisionAnalysisShimmerState extends State<_VisionAnalysisShimmer>
       },
     );
   }
+
 }
 
 class _ActionButton extends StatelessWidget {
@@ -1481,6 +1473,7 @@ class _ActionButton extends StatelessWidget {
       ),
     );
   }
+
 }
 
 class _ExportMessageWidget extends StatelessWidget {
