@@ -107,23 +107,6 @@ class ApiService {
                 'required': ['prompt'],
               },
             }
-          },
-          {
-            'type': 'function',
-            'function': {
-              'name': 'web_search',
-              'description': 'Search the web for up-to-date information on a topic, including news and images.',
-              'parameters': {
-                'type': 'object',
-                'properties': {
-                  'query': {
-                    'type': 'string',
-                    'description': 'The search query or topic.',
-                  }
-                },
-                'required': ['query'],
-              },
-            }
           }
         ]
       };

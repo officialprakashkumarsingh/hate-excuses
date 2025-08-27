@@ -1,5 +1,4 @@
 import 'message_model.dart';
-import 'web_search_result_model.dart';
 
 class VisionAnalysisMessage extends Message {
   final bool isAnalyzing;
@@ -12,7 +11,6 @@ class VisionAnalysisMessage extends Message {
     this.analysisPrompt,
     this.analysisResult,
     bool hasError = false,
-    super.webSearchResult,
   }) : super(
           id: id,
           content: analysisResult ?? '',
@@ -30,7 +28,6 @@ class VisionAnalysisMessage extends Message {
     DateTime? timestamp,
     bool? isStreaming,
     bool? hasError,
-    WebSearchResult? webSearchResult,
   }) {
     // For VisionAnalysisMessage, we treat content as analysisResult
     return VisionAnalysisMessage(
@@ -39,7 +36,6 @@ class VisionAnalysisMessage extends Message {
       analysisPrompt: analysisPrompt,
       analysisResult: content ?? this.analysisResult,
       hasError: hasError ?? this.hasError,
-      webSearchResult: webSearchResult ?? this.webSearchResult,
     );
   }
 }

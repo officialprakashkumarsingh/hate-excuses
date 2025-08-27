@@ -240,21 +240,19 @@ class ChatHistoryService extends ChangeNotifier {
 
         switch (messageType) {
           case 'image':
-            return ImageMessage.fromJson(json, metadata ?? {});
+            return ImageMessage.fromJson(json, metadata!);
           case 'vision':
-            return VisionMessage.fromJson(json, metadata ?? {});
+            return VisionMessage.fromJson(json, metadata!);
           case 'diagram':
-            return DiagramMessage.fromJson(json, metadata ?? {});
+            return DiagramMessage.fromJson(json, metadata!);
           case 'presentation':
-            return PresentationMessage.fromJson(json, metadata ?? {});
+            return PresentationMessage.fromJson(json, metadata!);
           case 'chart':
-            return ChartMessage.fromJson(json, metadata ?? {});
+            return ChartMessage.fromJson(json, metadata!);
           case 'flashcard':
-            return FlashcardMessage.fromJson(json, metadata ?? {});
+            return FlashcardMessage.fromJson(json, metadata!);
           case 'quiz':
-            return QuizMessage.fromJson(json, metadata ?? {});
-          case 'web_search':
-            return Message.fromJson(json, metadata ?? {});
+            return QuizMessage.fromJson(json, metadata!);
           default:
             return Message(
               id: json['id'],
@@ -356,11 +354,6 @@ class ChatHistoryService extends ChangeNotifier {
           'type': 'quiz',
           'prompt': message.prompt,
           'questions': message.questions.map((q) => q.toJson()).toList(),
-        };
-      } else if (message.webSearchResult != null) {
-        data['metadata'] = {
-          'type': 'web_search',
-          'webSearchResult': message.webSearchResult!.toJson(),
         };
       }
 

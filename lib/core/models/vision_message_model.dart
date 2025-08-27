@@ -1,5 +1,4 @@
 import 'message_model.dart';
-import 'web_search_result_model.dart';
 
 class VisionMessage extends Message {
   final String imageData;
@@ -16,7 +15,6 @@ class VisionMessage extends Message {
     this.model,
     super.isStreaming = false,
     super.hasError = false,
-    super.webSearchResult,
   });
 
   @override
@@ -27,7 +25,6 @@ class VisionMessage extends Message {
     DateTime? timestamp,
     bool? isStreaming,
     bool? hasError,
-    WebSearchResult? webSearchResult,
     String? model,
     String? imageData,
     String? analysisPrompt,
@@ -39,7 +36,6 @@ class VisionMessage extends Message {
       timestamp: timestamp ?? this.timestamp,
       isStreaming: isStreaming ?? this.isStreaming,
       hasError: hasError ?? this.hasError,
-      webSearchResult: webSearchResult ?? this.webSearchResult,
       model: model ?? this.model,
       imageData: imageData ?? this.imageData,
       analysisPrompt: analysisPrompt ?? this.analysisPrompt,

@@ -22,7 +22,6 @@ import '../../../core/models/quiz_message_model.dart';
 import '../../../core/models/vision_analysis_message_model.dart';
 import '../../../core/models/file_upload_message_model.dart';
 import '../../../core/services/diagram_service.dart';
-import '../../../core/services/web_search_service.dart';
 import '../../../core/services/chart_service.dart';
 import '../../../core/services/flashcard_service.dart';
 import '../../../core/services/quiz_service.dart';
@@ -89,49 +88,42 @@ class _ChatPageState extends State<ChatPage> {
   }
   
   Future<void> _loadCurrentSession() async {
-    if (_isLoadingHistory) return;
-
     final sessionId = ChatHistoryService.instance.currentSessionId;
     
-    // Introduce a delay before showing the shimmer to prevent blinking on fast loads
-    final shimmerTimer = Timer(const Duration(milliseconds: 200), () {
-      if (mounted && !_isLoadingHistory) {
-        setState(() {
-          _isLoadingHistory = true;
-        });
-      }
-    });
+    if (!_isLoadingHistory) {
+      setState(() {
+        _isLoadingHistory = true;
+      });
 
-    try {
-      if (sessionId != null) {
-        final messages = await ChatHistoryService.instance.loadSessionMessages(sessionId);
-        if (mounted) {
-          shimmerTimer.cancel(); // Cancel timer if loading is faster than delay
-          setState(() {
-            _messages.clear();
-            _messages.addAll(messages);
-            _isLoadingHistory = false;
-          });
+      try {
+        if (sessionId != null) {
+          // Load messages for existing session
+          final messages = await ChatHistoryService.instance.loadSessionMessages(sessionId);
+          if (mounted) {
+            setState(() {
+              _messages.clear();
+              _messages.addAll(messages);
+              _isLoadingHistory = false;
+            });
 
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (_scrollController.hasClients && _messages.isNotEmpty) {
-              _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
-            }
-          });
+            // Scroll to bottom after loading messages
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (_scrollController.hasClients && _messages.isNotEmpty) {
+                _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+              }
+            });
+          }
+        } else {
+          // New session - clear messages
+          if (mounted) {
+            setState(() {
+              _messages.clear();
+              _isLoadingHistory = false;
+            });
+          }
         }
-      } else {
-        shimmerTimer.cancel();
-        if (mounted) {
-          setState(() {
-            _messages.clear();
-            _isLoadingHistory = false;
-          });
-        }
-      }
-    } catch (e) {
-      shimmerTimer.cancel();
-      print('Error loading session messages: $e');
-      if (mounted) {
+      } catch (e) {
+        print('Error loading session messages: $e');
         setState(() {
           _isLoadingHistory = false;
         });
@@ -744,22 +736,35 @@ class _ChatPageState extends State<ChatPage> {
       int chunkCount = 0;
       print('Starting to receive chunks for message at index: $messageIndex');
       
-      // Variables to handle tool calls
-      bool isProcessingToolCall = false;
-      final List<Map<String, dynamic>> toolCallChunks = [];
-
       await for (final chunk in stream) {
         if (chunk.startsWith('__TOOL_CALL__')) {
-          isProcessingToolCall = true;
+          // This is a tool call, not a text response.
           final toolCallJson = chunk.substring('__TOOL_CALL__'.length);
-          final decodedChunk = jsonDecode(toolCallJson) as List;
-          toolCallChunks.addAll(decodedChunk.cast<Map<String, dynamic>>());
-          continue; // Continue to next chunk
+          final toolCalls = jsonDecode(toolCallJson) as List;
+          final toolCall = toolCalls.first; // Assuming one tool call for now
+          final functionCall = toolCall['function'];
+          final functionName = functionCall['name'];
+          final arguments = jsonDecode(functionCall['arguments']);
+
+          // --- HANDLE TOOL CALLS ---
+          if (functionName == 'generate_image') {
+            final prompt = arguments['prompt'] as String;
+            final imageService = ImageService.instance;
+            final model = arguments['model'] as String? ?? imageService.selectedModel;
+
+            // Update the "thinking" message to an image generating message
+            setState(() {
+              _messages[messageIndex] = ImageMessage.generating(prompt, model);
+            });
+
+            await _handleImageModelResponse(prompt, model, messageIndex, 1, 0);
+
+          }
+          // Since a tool was called, we break the loop for this model's response.
+          break;
         }
 
-        if (!isProcessingToolCall) {
-          accumulatedContent += chunk;
-        }
+        accumulatedContent += chunk;
         chunkCount++;
         
         if (chunkCount == 1) {
@@ -794,20 +799,25 @@ class _ChatPageState extends State<ChatPage> {
         }
       }
 
-      // After the loop, check if we need to handle a tool call
-      if (isProcessingToolCall) {
-        await _executeToolCall(toolCallChunks, messageIndex, model);
-      } else {
-        // This was a regular text response
-        if (mounted && messageIndex < _messages.length) {
-          setState(() {
-            _messages[messageIndex] = _messages[messageIndex].copyWith(
-              content: accumulatedContent,
-              isStreaming: false,
-            );
-          });
+      // Mark streaming as complete
+      print('Streaming complete. Total chunks: $chunkCount, Content length: ${accumulatedContent.length}');
+
+      if (mounted && messageIndex < _messages.length) {
+        setState(() {
+          _messages[messageIndex] = _messages[messageIndex].copyWith(
+            content: accumulatedContent,
+            isStreaming: false,
+          );
           
-          // Save assistant message to history
+          // Set loading to false when last model completes
+          if (modelIndex == totalModels - 1) {
+            _isLoading = false;
+          }
+        });
+        print('Message marked as complete at index: $messageIndex');
+
+        // Save assistant message to history - don't await to avoid blocking
+        if (messageIndex < _messages.length) {
           ChatHistoryService.instance.saveMessage(
             _messages[messageIndex],
             modelName: model,
@@ -816,135 +826,19 @@ class _ChatPageState extends State<ChatPage> {
           });
         }
       }
-
-      // Set loading to false when the last model completes its response
-      if (modelIndex == totalModels - 1) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
     } catch (e) {
       if (mounted && messageIndex < _messages.length) {
         setState(() {
           _messages[messageIndex] = Message.error(
             'Error from ${_formatModelName(model)}: Please try again.',
           );
+
           if (modelIndex == totalModels - 1) {
             _isLoading = false;
           }
         });
       }
     }
-  }
-
-  Future<void> _executeToolCall(
-    List<Map<String, dynamic>> toolCallChunks,
-    int messageIndex,
-    String model,
-  ) async {
-    // 1. Aggregate the tool call chunks
-    final aggregatedCall = _aggregateToolCalls(toolCallChunks);
-    if (aggregatedCall == null) {
-      setState(() {
-        _messages[messageIndex] = Message.error('Failed to process tool call.');
-      });
-      return;
-    }
-
-    final functionName = aggregatedCall['function']['name'];
-    final arguments = jsonDecode(aggregatedCall['function']['arguments']);
-
-    // 2. Execute the appropriate tool
-    if (functionName == 'web_search') {
-      final query = arguments['query'] as String;
-      setState(() {
-        _messages[messageIndex] = Message.assistant('Searching the web for: "$query"...', isStreaming: true);
-      });
-
-      try {
-        final searchResult = await WebSearchService.search(query);
-
-        // 3. Send the tool result back to the AI for a summary
-        final newHistory = _messages.map((m) => m.toApiFormat()).toList().cast<Map<String, dynamic>>().toList();
-        final toolResultMessage = {
-          'role': 'tool',
-          'content': jsonEncode(searchResult.toJson()),
-          'tool_call_id': aggregatedCall['id'],
-        };
-        newHistory.add(toolResultMessage);
-
-        final summaryStream = await ApiService.sendMessage(
-          message: '',
-          model: model,
-          conversationHistory: newHistory,
-        );
-
-        // 4. Stream the summary into the message bubble
-        String summaryContent = '';
-        await for (final summaryChunk in summaryStream) {
-          if (summaryChunk.startsWith('__TOOL_CALL__')) continue;
-          summaryContent += summaryChunk;
-          setState(() {
-            _messages[messageIndex] = _messages[messageIndex].copyWith(
-              content: summaryContent,
-              isStreaming: true,
-            );
-          });
-        }
-
-        // 5. Finalize the message with the summary and search results
-        final finalMessage = _messages[messageIndex].copyWith(
-          content: summaryContent,
-          isStreaming: false,
-          webSearchResult: searchResult,
-        );
-
-        setState(() {
-          _messages[messageIndex] = finalMessage;
-        });
-
-        ChatHistoryService.instance.saveMessage(finalMessage, modelName: model);
-
-      } catch (e) {
-        setState(() {
-          _messages[messageIndex] = Message.error('Web search failed: ${e.toString()}');
-        });
-      }
-    } else if (functionName == 'generate_image') {
-      // Handle image generation
-      final prompt = arguments['prompt'] as String;
-      final imageService = ImageService.instance;
-      final imageModel = arguments['model'] as String? ?? imageService.selectedModel;
-
-      setState(() {
-        _messages[messageIndex] = ImageMessage.generating(prompt, imageModel);
-      });
-      await _handleImageModelResponse(prompt, imageModel, messageIndex, 1, 0);
-    }
-  }
-
-  Map<String, dynamic>? _aggregateToolCalls(List<Map<String, dynamic>> chunks) {
-    if (chunks.isEmpty) return null;
-
-    final aggregated = <String, dynamic>{
-      'id': '',
-      'type': 'function',
-      'function': {'name': '', 'arguments': ''}
-    };
-
-    for (final chunk in chunks) {
-      if (chunk['id'] != null) {
-        aggregated['id'] = chunk['id'];
-      }
-      if (chunk['function']?['name'] != null) {
-        aggregated['function']['name'] = chunk['function']['name'];
-      }
-      if (chunk['function']?['arguments'] != null) {
-        aggregated['function']['arguments'] += chunk['function']['arguments'];
-      }
-    }
-
-    return aggregated;
   }
 
   String _formatModelName(String model) {

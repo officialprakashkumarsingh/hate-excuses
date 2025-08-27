@@ -1,5 +1,4 @@
 import 'message_model.dart';
-import 'web_search_result_model.dart';
 
 class QuizQuestion {
   final String question;
@@ -44,7 +43,6 @@ class QuizMessage extends Message {
     required super.timestamp,
     super.isStreaming = false,
     super.hasError = false,
-    super.webSearchResult,
   }) : super(
           content: questions.map((q) => 
             '${q.question}\n${q.options.asMap().entries.map((e) => '${e.key + 1}. ${e.value}').join('\n')}'
@@ -70,7 +68,6 @@ class QuizMessage extends Message {
     DateTime? timestamp,
     bool? isStreaming,
     bool? hasError,
-    WebSearchResult? webSearchResult,
     String? prompt,
     List<QuizQuestion>? questions,
   }) {
@@ -81,7 +78,6 @@ class QuizMessage extends Message {
       timestamp: timestamp ?? this.timestamp,
       isStreaming: isStreaming ?? this.isStreaming,
       hasError: hasError ?? this.hasError,
-      webSearchResult: webSearchResult ?? this.webSearchResult,
     );
   }
 

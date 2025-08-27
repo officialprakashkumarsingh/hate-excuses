@@ -1,5 +1,4 @@
 import 'message_model.dart';
-import 'web_search_result_model.dart';
 
 class ImageMessage extends Message {
   final String imageUrl;
@@ -18,7 +17,6 @@ class ImageMessage extends Message {
     this.isGenerating = false,
     super.isStreaming = false,
     super.hasError = false,
-    super.webSearchResult,
   });
 
   @override
@@ -29,7 +27,6 @@ class ImageMessage extends Message {
     DateTime? timestamp,
     bool? isStreaming,
     bool? hasError,
-    WebSearchResult? webSearchResult,
     String? imageUrl,
     String? prompt,
     String? model,
@@ -42,7 +39,6 @@ class ImageMessage extends Message {
       timestamp: timestamp ?? this.timestamp,
       isStreaming: isStreaming ?? this.isStreaming,
       hasError: hasError ?? this.hasError,
-      webSearchResult: webSearchResult ?? this.webSearchResult,
       imageUrl: imageUrl ?? this.imageUrl,
       prompt: prompt ?? this.prompt,
       model: model ?? this.model,

@@ -26,16 +26,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   bool _isForceUpdateRequired = false;
 
-  // Hoist the ChatPage to prevent it from rebuilding
-  late final Widget _chatPage;
-
   @override
   void initState() {
     super.initState();
-
-    // Initialize the ChatPage once
-    _chatPage = const ChatPage();
-
     _animationController = AnimationController(
       duration: const Duration(milliseconds: 400),
       vsync: this,
@@ -220,7 +213,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       ),
       body: FadeTransition(
         opacity: _fadeAnimation,
-        child: _chatPage,
+        child: const ChatPage(),
       ),
     );
   }

@@ -1,5 +1,3 @@
-import 'web_search_result_model.dart';
-
 enum MessageType { user, assistant }
 
 class Message {
@@ -9,7 +7,6 @@ class Message {
   final DateTime timestamp;
   final bool isStreaming;
   final bool hasError;
-  final WebSearchResult? webSearchResult; // Added this field
 
   const Message({
     required this.id,
@@ -18,7 +15,6 @@ class Message {
     required this.timestamp,
     this.isStreaming = false,
     this.hasError = false,
-    this.webSearchResult, // Added to constructor
   });
 
   Message copyWith({
@@ -28,7 +24,6 @@ class Message {
     DateTime? timestamp,
     bool? isStreaming,
     bool? hasError,
-    WebSearchResult? webSearchResult,
   }) {
     return Message(
       id: id ?? this.id,
@@ -37,7 +32,6 @@ class Message {
       timestamp: timestamp ?? this.timestamp,
       isStreaming: isStreaming ?? this.isStreaming,
       hasError: hasError ?? this.hasError,
-      webSearchResult: webSearchResult ?? this.webSearchResult,
     );
   }
 
@@ -77,22 +71,6 @@ class Message {
     );
   }
 
-  factory Message.fromJson(Map<String, dynamic> json, Map<String, dynamic> metadata) {
-    WebSearchResult? webSearchResult;
-    if (metadata['webSearchResult'] != null) {
-      webSearchResult = WebSearchResult.fromJson(metadata['webSearchResult']);
-    }
-
-    return Message(
-      id: json['id'],
-      content: json['content'],
-      type: json['role'] == 'user' ? MessageType.user : MessageType.assistant,
-      timestamp: DateTime.parse(json['created_at']),
-      hasError: json['hasError'] ?? false,
-      webSearchResult: webSearchResult,
-    );
-  }
-
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
@@ -102,6 +80,3 @@ class Message {
   @override
   int get hashCode => id.hashCode;
 }
-
-// The WebSearchMessage class has been removed as its functionality
-// is now merged into the main Message class.
