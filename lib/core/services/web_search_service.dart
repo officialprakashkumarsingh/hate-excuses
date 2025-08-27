@@ -17,7 +17,7 @@ class WebSearchService {
       );
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
+        final List<dynamic> data = jsonDecode(response.body);
         return WebSearchResult.fromJson(data);
       } else {
         throw Exception('Failed to perform web search: ${response.statusCode} ${response.reasonPhrase}');
