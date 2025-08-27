@@ -89,42 +89,49 @@ class _ChatPageState extends State<ChatPage> {
   }
   
   Future<void> _loadCurrentSession() async {
+    if (_isLoadingHistory) return;
+
     final sessionId = ChatHistoryService.instance.currentSessionId;
     
-    if (!_isLoadingHistory) {
-      setState(() {
-        _isLoadingHistory = true;
-      });
-      
-      try {
-        if (sessionId != null) {
-          // Load messages for existing session
-          final messages = await ChatHistoryService.instance.loadSessionMessages(sessionId);
-          if (mounted) {
-            setState(() {
-              _messages.clear();
-              _messages.addAll(messages);
-              _isLoadingHistory = false;
-            });
-            
-            // Scroll to bottom after loading messages
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (_scrollController.hasClients && _messages.isNotEmpty) {
-                _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
-              }
-            });
-          }
-        } else {
-          // New session - clear messages
-          if (mounted) {
-            setState(() {
-              _messages.clear();
-              _isLoadingHistory = false;
-            });
-          }
+    // Introduce a delay before showing the shimmer to prevent blinking on fast loads
+    final shimmerTimer = Timer(const Duration(milliseconds: 200), () {
+      if (mounted && !_isLoadingHistory) {
+        setState(() {
+          _isLoadingHistory = true;
+        });
+      }
+    });
+
+    try {
+      if (sessionId != null) {
+        final messages = await ChatHistoryService.instance.loadSessionMessages(sessionId);
+        if (mounted) {
+          shimmerTimer.cancel(); // Cancel timer if loading is faster than delay
+          setState(() {
+            _messages.clear();
+            _messages.addAll(messages);
+            _isLoadingHistory = false;
+          });
+
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (_scrollController.hasClients && _messages.isNotEmpty) {
+              _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+            }
+          });
         }
-      } catch (e) {
-        print('Error loading session messages: $e');
+      } else {
+        shimmerTimer.cancel();
+        if (mounted) {
+          setState(() {
+            _messages.clear();
+            _isLoadingHistory = false;
+          });
+        }
+      }
+    } catch (e) {
+      shimmerTimer.cancel();
+      print('Error loading session messages: $e');
+      if (mounted) {
         setState(() {
           _isLoadingHistory = false;
         });
@@ -771,20 +778,13 @@ class _ChatPageState extends State<ChatPage> {
             try {
               final searchResult = await WebSearchService.search(query);
 
-              // Replace the "searching" message with the results widget
-              setState(() {
-                _messages[messageIndex] = WebSearchMessage(
-                  id: 'web_search_${DateTime.now().millisecondsSinceEpoch}',
-                  query: query,
-                  searchResult: searchResult,
-                );
-              });
-
-              // Now, send the results back to the AI to get a summary
+              // The "searching..." message is at _messages[messageIndex]
+              // Now, send the results back to the AI to get a summary.
+              // We will attach the search results to the *final* summary message.
               final newHistory = _messages.map((m) => m.toApiFormat()).toList().cast<Map<String, dynamic>>().toList();
               final toolResultMessage = {
                 'role': 'tool',
-                'content': jsonEncode(searchResult), // Send the full results
+                'content': jsonEncode(searchResult.toJson()), // Send the full results
                 'tool_call_id': toolCall['id'] as String,
               };
               newHistory.add(toolResultMessage);
@@ -795,21 +795,26 @@ class _ChatPageState extends State<ChatPage> {
                 conversationHistory: newHistory,
               );
 
-              // Add a new message bubble for the AI's summary
-              final summaryMessage = Message.assistant('', isStreaming: true);
-              _addMessage(summaryMessage);
-              final summaryMessageIndex = _messages.length - 1;
-
+              // Stream the summary into the existing message bubble
               String summaryContent = '';
               await for (final summaryChunk in summaryStream) {
+                if (summaryChunk.startsWith('__TOOL_CALL__')) continue; // Ignore nested tool calls for now
                 summaryContent += summaryChunk;
                 setState(() {
-                  _messages[summaryMessageIndex] = _messages[summaryMessageIndex].copyWith(content: summaryContent);
+                  _messages[messageIndex] = _messages[messageIndex].copyWith(
+                    content: summaryContent,
+                    isStreaming: true,
+                  );
                 });
               }
-              // Finalize the summary message
+
+              // Finalize the summary message and attach the search results
               setState(() {
-                _messages[summaryMessageIndex] = _messages[summaryMessageIndex].copyWith(isStreaming: false);
+                _messages[messageIndex] = _messages[messageIndex].copyWith(
+                  content: summaryContent,
+                  isStreaming: false,
+                  webSearchResult: searchResult, // Attach search results here
+                );
               });
 
             } catch (e) {

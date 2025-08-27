@@ -24,6 +24,14 @@ class WebSearchResult {
           .toList(),
     );
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'web_results': webPages.map((item) => item.toJson()).toList(),
+      'news_results': newsArticles.map((item) => item.toJson()).toList(),
+      'image_results': images.map((item) => item.toJson()).toList(),
+    };
+  }
 }
 
 class WebPageResult {
@@ -43,6 +51,14 @@ class WebPageResult {
       link: json['link'] ?? '',
       snippet: json['snippet'] ?? '',
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'title': title,
+      'link': link,
+      'snippet': snippet,
+    };
   }
 }
 
@@ -67,6 +83,15 @@ class NewsArticleResult {
       imageUrl: json['imageUrl'] ?? '',
     );
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'title': title,
+      'link': link,
+      'source': source,
+      'imageUrl': imageUrl,
+    };
+  }
 }
 
 class ImageResult {
@@ -83,5 +108,12 @@ class ImageResult {
       link: json['link'] ?? '',
       imageUrl: json['imageUrl'] ?? '',
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'link': link,
+      'imageUrl': imageUrl,
+    };
   }
 }
