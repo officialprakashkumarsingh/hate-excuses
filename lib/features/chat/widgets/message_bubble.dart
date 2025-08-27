@@ -1335,6 +1335,15 @@ class _ImageGenerationShimmerState extends State<_ImageGenerationShimmer>
       },
     );
   }
+
+  String? _getDomain(String urlString) {
+    try {
+      final uri = Uri.parse(urlString);
+      return uri.host;
+    } catch (e) {
+      return null;
+    }
+  }
 }
 
 class _ShimmerPainter extends CustomPainter {

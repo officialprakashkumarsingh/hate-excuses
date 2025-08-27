@@ -1,4 +1,5 @@
 import 'message_model.dart';
+import 'web_search_result_model.dart';
 
 class ImageMessage extends Message {
   final String imageUrl;

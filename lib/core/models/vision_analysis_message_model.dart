@@ -1,4 +1,5 @@
 import 'message_model.dart';
+import 'web_search_result_model.dart';
 
 class VisionAnalysisMessage extends Message {
   final bool isAnalyzing;
