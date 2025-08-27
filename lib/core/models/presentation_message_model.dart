@@ -11,6 +11,7 @@ class PresentationMessage extends Message {
     required DateTime timestamp,
     bool isStreaming = false,
     bool hasError = false,
+    super.webSearchResult,
   }) : super(
     id: id,
     content: _slidesToMarkdown(slides),
@@ -69,6 +70,7 @@ class PresentationMessage extends Message {
     DateTime? timestamp,
     bool? isStreaming,
     bool? hasError,
+    WebSearchResult? webSearchResult,
     String? prompt,
     List<PresentationSlide>? slides,
   }) {
@@ -79,6 +81,7 @@ class PresentationMessage extends Message {
       timestamp: timestamp ?? this.timestamp,
       isStreaming: isStreaming ?? this.isStreaming,
       hasError: hasError ?? this.hasError,
+      webSearchResult: webSearchResult ?? this.webSearchResult,
     );
   }
 

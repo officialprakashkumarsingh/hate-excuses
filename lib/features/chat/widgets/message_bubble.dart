@@ -893,7 +893,15 @@ class _MessageBubbleState extends State<MessageBubble>
                   itemCount: sources.length,
                   itemBuilder: (context, index) {
                     final source = sources[index];
-                    final domain = _getDomain(source.link);
+                    String? link;
+                    if (source is WebPageResult) {
+                      link = source.link;
+                    } else if (source is NewsArticleResult) {
+                      link = source.link;
+                    }
+                    if (link == null) return const SizedBox.shrink();
+
+                    final domain = _getDomain(link);
                     if (domain == null) return const SizedBox.shrink();
 
                     return Padding(
@@ -936,28 +944,29 @@ class _MessageBubbleState extends State<MessageBubble>
           maxChildSize: 0.9,
           expand: false,
           builder: (context, scrollController) {
-            return _SourcesSheet(result: result, scrollController: scrollController);
+            return _SourcesSheet(
+              result: result,
+              scrollController: scrollController,
+              getDomain: _getDomain, // Pass the function here
+            );
           },
         );
       },
     );
   }
 
-  String? _getDomain(String urlString) {
-    try {
-      final uri = Uri.parse(urlString);
-      return uri.host;
-    } catch (e) {
-      return null;
-    }
-  }
 }
 
 class _SourcesSheet extends StatelessWidget {
   final WebSearchResult result;
   final ScrollController scrollController;
+  final String? Function(String) getDomain;
 
-  const _SourcesSheet({required this.result, required this.scrollController});
+  const _SourcesSheet({
+    required this.result,
+    required this.scrollController,
+    required this.getDomain,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1019,7 +1028,7 @@ class _SourcesSheet extends StatelessWidget {
 
   Widget _buildWebPageTile(BuildContext context, WebPageResult page) {
     final theme = Theme.of(context);
-    final domain = _getDomain(page.link);
+    final domain = getDomain(page.link);
 
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 6),
