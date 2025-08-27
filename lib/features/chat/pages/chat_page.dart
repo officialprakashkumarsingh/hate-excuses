@@ -744,90 +744,22 @@ class _ChatPageState extends State<ChatPage> {
       int chunkCount = 0;
       print('Starting to receive chunks for message at index: $messageIndex');
       
+      // Variables to handle tool calls
+      bool isProcessingToolCall = false;
+      final List<Map<String, dynamic>> toolCallChunks = [];
+
       await for (final chunk in stream) {
         if (chunk.startsWith('__TOOL_CALL__')) {
-          // This is a tool call, not a text response.
+          isProcessingToolCall = true;
           final toolCallJson = chunk.substring('__TOOL_CALL__'.length);
-          final toolCalls = jsonDecode(toolCallJson) as List;
-          final toolCall = toolCalls.first; // Assuming one tool call for now
-          final functionCall = toolCall['function'];
-          final functionName = functionCall['name'];
-          final arguments = jsonDecode(functionCall['arguments']);
-
-          // --- HANDLE TOOL CALLS ---
-          if (functionName == 'generate_image') {
-            final prompt = arguments['prompt'] as String;
-            final imageService = ImageService.instance;
-            final model = arguments['model'] as String? ?? imageService.selectedModel;
-
-            // Update the "thinking" message to an image generating message
-            setState(() {
-              _messages[messageIndex] = ImageMessage.generating(prompt, model);
-            });
-
-            await _handleImageModelResponse(prompt, model, messageIndex, 1, 0);
-
-          } else if (functionName == 'web_search') {
-            final query = arguments['query'] as String;
-
-            // Update the "thinking" message to a "searching" message
-            setState(() {
-              _messages[messageIndex] = Message.assistant('Searching the web for: "$query"...', isStreaming: true);
-            });
-
-            try {
-              final searchResult = await WebSearchService.search(query);
-
-              // The "searching..." message is at _messages[messageIndex]
-              // Now, send the results back to the AI to get a summary.
-              // We will attach the search results to the *final* summary message.
-              final newHistory = _messages.map((m) => m.toApiFormat()).toList().cast<Map<String, dynamic>>().toList();
-              final toolResultMessage = {
-                'role': 'tool',
-                'content': jsonEncode(searchResult.toJson()), // Send the full results
-                'tool_call_id': toolCall['id'] as String,
-              };
-              newHistory.add(toolResultMessage);
-
-              final summaryStream = await ApiService.sendMessage(
-                message: '', // No new user message, just summarizing tool results
-                model: model,
-                conversationHistory: newHistory,
-              );
-
-              // Stream the summary into the existing message bubble
-              String summaryContent = '';
-              await for (final summaryChunk in summaryStream) {
-                if (summaryChunk.startsWith('__TOOL_CALL__')) continue; // Ignore nested tool calls for now
-                summaryContent += summaryChunk;
-                setState(() {
-                  _messages[messageIndex] = _messages[messageIndex].copyWith(
-                    content: summaryContent,
-                    isStreaming: true,
-                  );
-                });
-              }
-
-              // Finalize the summary message and attach the search results
-              setState(() {
-                _messages[messageIndex] = _messages[messageIndex].copyWith(
-                  content: summaryContent,
-                  isStreaming: false,
-                  webSearchResult: searchResult, // Attach search results here
-                );
-              });
-
-            } catch (e) {
-              setState(() {
-                _messages[messageIndex] = Message.error('Web search failed: ${e.toString()}');
-              });
-            }
-          }
-          // Since a tool was called, we break the loop for this model's response.
-          break;
+          final decodedChunk = jsonDecode(toolCallJson) as List;
+          toolCallChunks.addAll(decodedChunk.cast<Map<String, dynamic>>());
+          continue; // Continue to next chunk
         }
 
-        accumulatedContent += chunk;
+        if (!isProcessingToolCall) {
+          accumulatedContent += chunk;
+        }
         chunkCount++;
         
         if (chunkCount == 1) {
@@ -862,25 +794,20 @@ class _ChatPageState extends State<ChatPage> {
         }
       }
 
-      // Mark streaming as complete
-      print('Streaming complete. Total chunks: $chunkCount, Content length: ${accumulatedContent.length}');
-      
-      if (mounted && messageIndex < _messages.length) {
-        setState(() {
-          _messages[messageIndex] = _messages[messageIndex].copyWith(
-            content: accumulatedContent,
-            isStreaming: false,
-          );
+      // After the loop, check if we need to handle a tool call
+      if (isProcessingToolCall) {
+        await _executeToolCall(toolCallChunks, messageIndex, model);
+      } else {
+        // This was a regular text response
+        if (mounted && messageIndex < _messages.length) {
+          setState(() {
+            _messages[messageIndex] = _messages[messageIndex].copyWith(
+              content: accumulatedContent,
+              isStreaming: false,
+            );
+          });
           
-          // Set loading to false when last model completes
-          if (modelIndex == totalModels - 1) {
-            _isLoading = false;
-          }
-        });
-        print('Message marked as complete at index: $messageIndex');
-        
-        // Save assistant message to history - don't await to avoid blocking
-        if (messageIndex < _messages.length) {
+          // Save assistant message to history
           ChatHistoryService.instance.saveMessage(
             _messages[messageIndex],
             modelName: model,
@@ -889,19 +816,135 @@ class _ChatPageState extends State<ChatPage> {
           });
         }
       }
+
+      // Set loading to false when the last model completes its response
+      if (modelIndex == totalModels - 1) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     } catch (e) {
       if (mounted && messageIndex < _messages.length) {
         setState(() {
           _messages[messageIndex] = Message.error(
             'Error from ${_formatModelName(model)}: Please try again.',
           );
-          
           if (modelIndex == totalModels - 1) {
             _isLoading = false;
           }
         });
       }
     }
+  }
+
+  Future<void> _executeToolCall(
+    List<Map<String, dynamic>> toolCallChunks,
+    int messageIndex,
+    String model,
+  ) async {
+    // 1. Aggregate the tool call chunks
+    final aggregatedCall = _aggregateToolCalls(toolCallChunks);
+    if (aggregatedCall == null) {
+      setState(() {
+        _messages[messageIndex] = Message.error('Failed to process tool call.');
+      });
+      return;
+    }
+
+    final functionName = aggregatedCall['function']['name'];
+    final arguments = jsonDecode(aggregatedCall['function']['arguments']);
+
+    // 2. Execute the appropriate tool
+    if (functionName == 'web_search') {
+      final query = arguments['query'] as String;
+      setState(() {
+        _messages[messageIndex] = Message.assistant('Searching the web for: "$query"...', isStreaming: true);
+      });
+
+      try {
+        final searchResult = await WebSearchService.search(query);
+
+        // 3. Send the tool result back to the AI for a summary
+        final newHistory = _messages.map((m) => m.toApiFormat()).toList().cast<Map<String, dynamic>>().toList();
+        final toolResultMessage = {
+          'role': 'tool',
+          'content': jsonEncode(searchResult.toJson()),
+          'tool_call_id': aggregatedCall['id'],
+        };
+        newHistory.add(toolResultMessage);
+
+        final summaryStream = await ApiService.sendMessage(
+          message: '',
+          model: model,
+          conversationHistory: newHistory,
+        );
+
+        // 4. Stream the summary into the message bubble
+        String summaryContent = '';
+        await for (final summaryChunk in summaryStream) {
+          if (summaryChunk.startsWith('__TOOL_CALL__')) continue;
+          summaryContent += summaryChunk;
+          setState(() {
+            _messages[messageIndex] = _messages[messageIndex].copyWith(
+              content: summaryContent,
+              isStreaming: true,
+            );
+          });
+        }
+
+        // 5. Finalize the message with the summary and search results
+        final finalMessage = _messages[messageIndex].copyWith(
+          content: summaryContent,
+          isStreaming: false,
+          webSearchResult: searchResult,
+        );
+
+        setState(() {
+          _messages[messageIndex] = finalMessage;
+        });
+
+        ChatHistoryService.instance.saveMessage(finalMessage, modelName: model);
+
+      } catch (e) {
+        setState(() {
+          _messages[messageIndex] = Message.error('Web search failed: ${e.toString()}');
+        });
+      }
+    } else if (functionName == 'generate_image') {
+      // Handle image generation
+      final prompt = arguments['prompt'] as String;
+      final imageService = ImageService.instance;
+      final imageModel = arguments['model'] as String? ?? imageService.selectedModel;
+
+      setState(() {
+        _messages[messageIndex] = ImageMessage.generating(prompt, imageModel);
+      });
+      await _handleImageModelResponse(prompt, imageModel, messageIndex, 1, 0);
+    }
+  }
+
+  Map<String, dynamic>? _aggregateToolCalls(List<Map<String, dynamic>> chunks) {
+    if (chunks.isEmpty) return null;
+
+    final aggregated = <String, dynamic>{
+      'id': '',
+      'type': 'function',
+      'function': {'name': '', 'arguments': ''}
+    };
+
+    for (final chunk in chunks) {
+      if (chunk['id'] != null) {
+        aggregated['id'] = chunk['id'];
+      }
+      if (chunk['function']?['name'] != null) {
+        aggregated['function']['name'] = chunk['function']['name'];
+      }
+      if (chunk['function']?['arguments'] != null) {
+        aggregated['function']['arguments'] += chunk['function']['arguments'];
+      }
+    }
+
+    return aggregated;
   }
 
   String _formatModelName(String model) {
