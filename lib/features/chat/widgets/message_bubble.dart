@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/models/message_model.dart';
 import '../../../core/services/tts_service.dart';
@@ -322,11 +323,6 @@ class _MessageBubbleState extends State<MessageBubble>
                   _buildQuizContent(widget.message as QuizMessage),
                 ] else if (widget.message is VisionAnalysisMessage) ...[
                   _buildVisionAnalysisContent(widget.message as VisionAnalysisMessage),
-                ] else if (widget.message is WebSearchMessage) ...[
-                  WebSearchResultsWidget(
-                    result: (widget.message as WebSearchMessage).searchResult,
-                    query: (widget.message as WebSearchMessage).query,
-                  ),
                 ] else ...[
                   // Regular message content with markdown support
                   MarkdownMessage(
@@ -334,6 +330,12 @@ class _MessageBubbleState extends State<MessageBubble>
                     isUser: isUser,
                     isStreaming: isStreaming,
                   ),
+
+                  // If web search results exist, show the sources
+                  if (widget.message.webSearchResult != null) ...[
+                    const SizedBox(height: 12),
+                    _buildSourcesWidget(context, widget.message.webSearchResult!),
+                  ],
                 ],
                 
                 // Streaming indicator - only show if no content yet
@@ -358,7 +360,8 @@ class _MessageBubbleState extends State<MessageBubble>
         ),
 
           // Actions - Show different actions based on message type
-          if (!isUser && !isStreaming && !hasError)
+          // Do not show for web search results
+          if (!isUser && !isStreaming && !hasError && widget.message.webSearchResult == null)
             Consumer<TtsService>(
               builder: (context, ttsService, child) {
                 final isPlaying = ttsService.ttsState == TtsState.playing && ttsService.currentMessageId == widget.message.id;
@@ -845,6 +848,283 @@ class _MessageBubbleState extends State<MessageBubble>
         content: message.content,
         isUser: false,
       );
+    }
+  }
+
+  // --- Web Search Sources UI ---
+
+  Widget _buildSourcesWidget(BuildContext context, WebSearchResult result) {
+    final sources = [
+      ...result.webPages,
+      ...result.newsArticles,
+    ];
+    if (sources.isEmpty) return const SizedBox.shrink();
+
+    return GestureDetector(
+      onTap: () => _showSourcesBottomSheet(context, result),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.4),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              CupertinoIcons.globe,
+              size: 16,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'Sources',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: SizedBox(
+                height: 24,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: sources.length,
+                  itemBuilder: (context, index) {
+                    final source = sources[index];
+                    final domain = _getDomain(source.link);
+                    if (domain == null) return const SizedBox.shrink();
+
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8.0),
+                      child: Tooltip(
+                        message: domain,
+                        child: Image.network(
+                          'https://www.google.com/s2/favicons?domain=$domain&sz=32',
+                          width: 24,
+                          height: 24,
+                          errorBuilder: (c, e, s) => const Icon(
+                            CupertinoIcons.link,
+                            size: 16,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showSourcesBottomSheet(BuildContext context, WebSearchResult result) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.6,
+          minChildSize: 0.4,
+          maxChildSize: 0.9,
+          expand: false,
+          builder: (context, scrollController) {
+            return _SourcesSheet(result: result, scrollController: scrollController);
+          },
+        );
+      },
+    );
+  }
+
+  String? _getDomain(String urlString) {
+    try {
+      final uri = Uri.parse(urlString);
+      return uri.host;
+    } catch (e) {
+      return null;
+    }
+  }
+}
+
+class _SourcesSheet extends StatelessWidget {
+  final WebSearchResult result;
+  final ScrollController scrollController;
+
+  const _SourcesSheet({required this.result, required this.scrollController});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final webPages = result.webPages;
+    final newsArticles = result.newsArticles;
+    final allSources = [...webPages, ...newsArticles];
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Handle
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: theme.colorScheme.onSurface.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          // Title
+          Text(
+            'Sources',
+            style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 8),
+          // List of sources
+          Expanded(
+            child: ListView.builder(
+              controller: scrollController,
+              itemCount: allSources.length,
+              itemBuilder: (context, index) {
+                final source = allSources[index];
+                if (source is WebPageResult) {
+                  return _buildWebPageTile(context, source);
+                } else if (source is NewsArticleResult) {
+                  return _buildNewsArticleTile(context, source);
+                }
+                return const SizedBox.shrink();
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _launchURL(String urlString) async {
+    final uri = Uri.tryParse(urlString);
+    if (uri != null && await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  Widget _buildWebPageTile(BuildContext context, WebPageResult page) {
+    final theme = Theme.of(context);
+    final domain = _getDomain(page.link);
+
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      elevation: 0,
+      color: theme.colorScheme.surfaceVariant.withOpacity(0.3),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: InkWell(
+        onTap: () => _launchURL(page.link),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(12.0),
+          child: Row(
+            children: [
+              Image.network(
+                'https://www.google.com/s2/favicons?domain=${domain ?? ""}&sz=64',
+                width: 32,
+                height: 32,
+                errorBuilder: (c, e, s) => const Icon(CupertinoIcons.globe, size: 24),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      page.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
+                    ),
+                    if (page.snippet.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        page.snippet,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurface.withOpacity(0.6),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNewsArticleTile(BuildContext context, NewsArticleResult article) {
+    final theme = Theme.of(context);
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      elevation: 0,
+      color: theme.colorScheme.surfaceVariant.withOpacity(0.3),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => _launchURL(article.link),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (article.imageUrl.isNotEmpty)
+              Image.network(
+                article.imageUrl,
+                height: 120,
+                width: double.infinity,
+                fit: BoxFit.cover,
+                errorBuilder: (c, e, s) => const SizedBox.shrink(),
+              ),
+            Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    article.title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    article.source,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurface.withOpacity(0.6),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String? _getDomain(String urlString) {
+    try {
+      final uri = Uri.parse(urlString);
+      return uri.host;
+    } catch (e) {
+      return null;
     }
   }
 }

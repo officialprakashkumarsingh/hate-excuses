@@ -253,6 +253,8 @@ class ChatHistoryService extends ChangeNotifier {
             return FlashcardMessage.fromJson(json, metadata!);
           case 'quiz':
             return QuizMessage.fromJson(json, metadata!);
+          case 'web_search':
+            return Message.fromJson(json, metadata);
           default:
             return Message(
               id: json['id'],
@@ -354,6 +356,11 @@ class ChatHistoryService extends ChangeNotifier {
           'type': 'quiz',
           'prompt': message.prompt,
           'questions': message.questions.map((q) => q.toJson()).toList(),
+        };
+      } else if (message.webSearchResult != null) {
+        data['metadata'] = {
+          'type': 'web_search',
+          'webSearchResult': message.webSearchResult!.toJson(),
         };
       }
 
