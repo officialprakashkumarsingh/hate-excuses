@@ -11,17 +11,29 @@ class WebSearchResult {
     required this.images,
   });
 
-  factory WebSearchResult.fromJson(Map<String, dynamic> json) {
+  factory WebSearchResult.fromJson(List<dynamic> jsonList) {
+    final List<WebPageResult> webPages = [];
+    final List<NewsArticleResult> newsArticles = [];
+    final List<ImageResult> images = [];
+
+    for (var item in jsonList) {
+      if (item is Map<String, dynamic>) {
+        // Differentiate based on keys
+        if (item.containsKey('snippet')) {
+          webPages.add(WebPageResult.fromJson(item));
+        } else if (item.containsKey('source')) {
+          newsArticles.add(NewsArticleResult.fromJson(item));
+        } else if (item.containsKey('imageUrl') && item.keys.length <= 2) {
+          // Assuming items with only imageUrl and link are images
+          images.add(ImageResult.fromJson(item));
+        }
+      }
+    }
+
     return WebSearchResult(
-      webPages: (json['web_results'] as List? ?? [])
-          .map((item) => WebPageResult.fromJson(item))
-          .toList(),
-      newsArticles: (json['news_results'] as List? ?? [])
-          .map((item) => NewsArticleResult.fromJson(item))
-          .toList(),
-      images: (json['image_results'] as List? ?? [])
-          .map((item) => ImageResult.fromJson(item))
-          .toList(),
+      webPages: webPages,
+      newsArticles: newsArticles,
+      images: images,
     );
   }
 
