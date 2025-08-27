@@ -870,7 +870,6 @@ class _MessageBubbleState extends State<MessageBubble>
           borderRadius: BorderRadius.circular(8),
         ),
         child: Row(
-          mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
               CupertinoIcons.globe,
