@@ -13,6 +13,7 @@ class ChartMessage extends Message {
     required super.timestamp,
     super.isStreaming = false,
     super.hasError = false,
+    super.webSearchResult,
   }) : super(
           content: chartConfig,
           type: MessageType.assistant,
@@ -36,6 +37,7 @@ class ChartMessage extends Message {
     DateTime? timestamp,
     bool? isStreaming,
     bool? hasError,
+    WebSearchResult? webSearchResult,
     String? prompt,
     String? chartConfig,
     String? chartType,
@@ -50,6 +52,7 @@ class ChartMessage extends Message {
       timestamp: timestamp ?? this.timestamp,
       isStreaming: isStreaming ?? this.isStreaming,
       hasError: hasError ?? this.hasError,
+      webSearchResult: webSearchResult ?? this.webSearchResult,
     );
   }
 

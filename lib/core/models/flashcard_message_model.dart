@@ -39,6 +39,7 @@ class FlashcardMessage extends Message {
     required super.timestamp,
     super.isStreaming = false,
     super.hasError = false,
+    super.webSearchResult,
   }) : super(
           content: flashcards.map((f) => 'Q: ${f.question}\nA: ${f.answer}').join('\n\n'),
           type: MessageType.assistant,
@@ -62,6 +63,7 @@ class FlashcardMessage extends Message {
     DateTime? timestamp,
     bool? isStreaming,
     bool? hasError,
+    WebSearchResult? webSearchResult,
     String? prompt,
     List<FlashcardItem>? flashcards,
   }) {
@@ -72,6 +74,7 @@ class FlashcardMessage extends Message {
       timestamp: timestamp ?? this.timestamp,
       isStreaming: isStreaming ?? this.isStreaming,
       hasError: hasError ?? this.hasError,
+      webSearchResult: webSearchResult ?? this.webSearchResult,
     );
   }
 
